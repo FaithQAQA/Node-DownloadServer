@@ -1,0 +1,26 @@
+{
+  "dependencies": {
+    "7zip-bin": "^5.2.0",
+    "adm-zip": "^0.5.16",
+    "axios": "^1.9.0",
+    "body-parser": "^2.2.0",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "extract-zip": "^2.0.1",
+    "file-type": "^21.0.0",
+    "fs-extra": "^11.3.0",
+    "inquirer": "^12.6.3",
+    "node-7z": "^3.0.0"
+  },
+  "name": "node",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": ""
+}
