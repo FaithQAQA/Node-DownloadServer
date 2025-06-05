@@ -238,23 +238,21 @@ app.post('/download-keys', async (req, res) => {
       await fs.remove(tempDownloadPath);
       return res.json({ message: 'Keys downloaded and extracted (zip).' });
     } else if (ext === '.rar' || ext === '.7z') {
-      const stream = Seven.extractFull(tempDownloadPath, registeredPath, {
-        $bin: pathTo7zip,
-        overwrite: 'a'
+      // Wrap the extraction in a Promise and await it:
+      await new Promise((resolve, reject) => {
+        const stream = Seven.extractFull(tempDownloadPath, registeredPath, {
+          $bin: pathTo7zip,
+          overwrite: 'a'
+        });
+
+        stream.on('end', resolve);
+
+        stream.on('error', reject);
       });
 
-      stream.on('end', async () => {
-        await fs.remove(tempDownloadPath);
-        return res.json({ message: `Keys downloaded and extracted (${ext}).` });
-      });
+      await fs.remove(tempDownloadPath);
+      return res.json({ message: `Keys downloaded and extracted (${ext}).` });
 
-      stream.on('error', async (err) => {
-        console.error('7z extraction failed:', err);
-        await fs.remove(tempDownloadPath);
-        return res.status(500).json({ error: '7z extraction failed.', details: err.message });
-      });
-
-      return; // prevent double response
     } else {
       await fs.remove(tempDownloadPath);
       return res.status(400).json({ error: `Unsupported archive format: ${ext}` });
@@ -262,9 +260,15 @@ app.post('/download-keys', async (req, res) => {
 
   } catch (err) {
     console.error('General error:', err);
-    return res.status(500).json({ error: 'Download failed', details: err.message });
+    if (!res.headersSent) {
+      return res.status(500).json({ error: 'Download failed', details: err.message });
+    } else {
+      // Response already sent, just log
+      console.error('Headers already sent, cannot send error response');
+    }
   }
 });
+
 
 app.post('/download-dynamic', async (req, res) => {
   const { url, fileName, basePath, destinationType, title } = req.body;
