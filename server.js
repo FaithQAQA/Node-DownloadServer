@@ -16,11 +16,10 @@ app.use(cors({
   credentials: true
 }));
 
-app.options('*', cors({
+app.options('/{*any}', cors({
   origin: 'https://file-downloader-tau.vercel.app',
   credentials: true
 }));
-
 
 
 
