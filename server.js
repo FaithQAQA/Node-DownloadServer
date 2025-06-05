@@ -10,17 +10,18 @@ const { exec } = require('child_process');
 const fs = require('fs-extra'); // ✅ Correct
 const os = require('os');
 
+const allowedOrigin = 'https://file-downloader-tau.vercel.app';
 
 app.use(cors({
-  origin: 'https://file-downloader-tau.vercel.app',
-  credentials: true
+  origin: allowedOrigin,
+  credentials: true,
 }));
 
+// OPTIONAL: To handle preflight requests (e.g., for POST)
 app.options('/{*any}', cors({
-  origin: 'https://file-downloader-tau.vercel.app',
-  credentials: true
+  origin: allowedOrigin,
+  credentials: true,
 }));
-
 
 
 app.use(bodyParser.json());
