@@ -7,22 +7,37 @@ const port = 3000;
 const axios = require('axios');
 const extract = require('extract-zip');
 const { exec } = require('child_process');
-const fs = require('fs-extra'); // ✅ Correct
+const fs = require('fs-extra');
 const os = require('os');
+const fileTypeFromFile = require('file-type').fileTypeFromFile;
 
-const allowedOrigin = 'https://file-downloader-tau.vercel.app';
+const allowedOrigins = [
+  'https://file-downloader-tau.vercel.app',
+  'http://localhost:4200'
+];
 
 app.use(cors({
-  origin: allowedOrigin,
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
 }));
 
-// OPTIONAL: To handle preflight requests (e.g., for POST)
+// Handle preflight requests for all routes
 app.options('/{*any}', cors({
-  origin: allowedOrigin,
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
 }));
-
 
 app.use(bodyParser.json());
 
@@ -55,9 +70,12 @@ app.post('/create-folders', (req, res) => {
   }
 });
 
-
 app.post('/extract', async (req, res) => {
   const { archivePath, targetDir } = req.body;
+
+  if (!archivePath || !targetDir) {
+    return res.status(400).json({ error: 'archivePath and targetDir are required' });
+  }
 
   const resolvedArchivePath = path.resolve(archivePath);
   const resolvedTargetDir = path.resolve(targetDir);
@@ -67,7 +85,7 @@ app.post('/extract', async (req, res) => {
       return res.status(404).json({ error: 'Archive file not found.', path: resolvedArchivePath });
     }
 
-    await fs.ensureDir(resolvedTargetDir); // Ensure destination exists
+    await fs.ensureDir(resolvedTargetDir);
     await extract(resolvedArchivePath, { dir: resolvedTargetDir });
 
     res.json({ message: 'Extraction complete.' });
@@ -76,7 +94,6 @@ app.post('/extract', async (req, res) => {
     res.status(500).json({ error: 'Extraction failed.', details: err.message });
   }
 });
-
 
 app.post('/firmware-download', async (req, res) => {
   const { fileId, filename } = req.body;
@@ -95,7 +112,7 @@ app.post('/firmware-download', async (req, res) => {
       responseType: 'text'
     });
 
-    let confirmTokenMatch = initialRes.data.match(/confirm=([0-9A-Za-z_]+)&amp;/);
+    let confirmTokenMatch = initialRes.data.match(/confirm=([0-9A-Za-z_]+)&/);
     let confirmToken = confirmTokenMatch ? confirmTokenMatch[1] : null;
 
     if (!confirmToken) {
@@ -124,20 +141,15 @@ app.post('/firmware-download', async (req, res) => {
   }
 });
 
-
-
-
-
+// Helper to download file from Google Drive with confirm token
 async function downloadFromGoogleDrive(fileId, dest) {
   const baseURL = 'https://drive.google.com/uc?export=download';
 
-  // Step 1: Get the initial page
   const initialRes = await axios.get(baseURL, {
     params: { id: fileId },
     responseType: 'text'
   });
 
-  // Try to find the confirm token from the HTML
   const tokenMatch = initialRes.data.match(/confirm=([0-9A-Za-z-_]+)&/);
   const confirmToken = tokenMatch ? tokenMatch[1] : null;
 
@@ -145,7 +157,6 @@ async function downloadFromGoogleDrive(fileId, dest) {
     ? `${baseURL}&confirm=${confirmToken}&id=${fileId}`
     : `${baseURL}&id=${fileId}`;
 
-  // Step 2: Download the file stream
   const response = await axios.get(finalUrl, { responseType: 'stream' });
 
   await new Promise((resolve, reject) => {
@@ -156,11 +167,9 @@ async function downloadFromGoogleDrive(fileId, dest) {
   });
 }
 
-
 const Seven = require('node-7z');
 const sevenBin = require('7zip-bin');
 const pathTo7zip = sevenBin.path7za;
-//const typeInfo = await fileTypeFromFile(tempDownloadPath);
 
 app.post('/download-keys', async (req, res) => {
   const { url, basePath, type, subtype, firmwarePath } = req.body;
@@ -191,7 +200,6 @@ app.post('/download-keys', async (req, res) => {
   const tempDownloadPath = path.join(os.tmpdir(), fileName);
 
   try {
-    // Download file
     if (parsedUrl.hostname.includes('drive.google.com')) {
       let fileId = null;
       const idMatch = url.match(/id=([^&]+)/) || url.match(/\/d\/([^\/]+)/);
@@ -217,7 +225,6 @@ app.post('/download-keys', async (req, res) => {
       });
     }
 
-    // Detect extension after download
     let ext = path.extname(tempDownloadPath).toLowerCase();
     if (!ext || ext === '') {
       const typeInfo = await fileTypeFromFile(tempDownloadPath);
@@ -226,7 +233,6 @@ app.post('/download-keys', async (req, res) => {
 
     console.log('Detected file type extension:', ext);
 
-    // Extract based on file extension
     if (ext === '.zip') {
       await extract(tempDownloadPath, { dir: registeredPath });
       await fs.remove(tempDownloadPath);
@@ -262,6 +268,10 @@ app.post('/download-keys', async (req, res) => {
 
 app.post('/download-dynamic', async (req, res) => {
   const { url, fileName, basePath, destinationType, title } = req.body;
+  if (!url || !fileName || !basePath) {
+    return res.status(400).json({ error: 'Missing url, fileName, or basePath' });
+  }
+
   const ext = path.extname(fileName).toLowerCase();
   const tempPath = path.join(os.tmpdir(), fileName);
 
@@ -276,7 +286,7 @@ app.post('/download-dynamic', async (req, res) => {
       break;
     case 'tool':
       // tool gets its own subfolder inside basePath
-      const cleanName = title.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 30);
+      const cleanName = title ? title.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 30) : 'tool';
       targetDir = path.join(basePath, cleanName);
       break;
     case 'wiigames':
@@ -343,18 +353,18 @@ app.post('/download-dynamic', async (req, res) => {
   }
 });
 
-
-
-
 app.post('/download-emulator', async (req, res) => {
   const { url, fileName, basePath, type, subtype, firmwarePath } = req.body;
+
+  if (!url || !fileName || !basePath) {
+    return res.status(400).json({ error: 'Missing url, fileName, or basePath' });
+  }
 
   try {
     const ext = path.extname(fileName).toLowerCase();
     const emuFolder = path.join(basePath, 'Emulators');
     await fs.ensureDir(emuFolder);
 
-    // Special case for firmware tools
     if (type === 'tool' && subtype === 'firmware') {
       if (!firmwarePath) {
         return res.status(400).json({ error: 'Missing firmwarePath in request body.' });
@@ -380,7 +390,10 @@ app.post('/download-emulator', async (req, res) => {
           await fs.remove(tempDownloadPath);
         } else if (ext === '.7z') {
           exec(`7z x "${tempDownloadPath}" -o"${registeredPath}" -y`, async (err) => {
-            if (err) return res.status(500).send('7z extraction failed');
+            if (err) {
+              console.error('7z extraction failed:', err);
+              return res.status(500).send('7z extraction failed');
+            }
             await fs.remove(tempDownloadPath);
             return res.json({ message: 'Firmware downloaded and installed.' });
           });
@@ -417,7 +430,10 @@ app.post('/download-emulator', async (req, res) => {
         await fs.remove(filePath);
       } else if (ext === '.7z') {
         exec(`7z x "${filePath}" -o"${emuFolder}" -y`, async (err) => {
-          if (err) return res.status(500).send('7z extraction failed');
+          if (err) {
+            console.error('7z extraction failed:', err);
+            return res.status(500).send('7z extraction failed');
+          }
           await fs.remove(filePath);
         });
       }
@@ -433,7 +449,6 @@ app.post('/download-emulator', async (req, res) => {
     return res.status(500).send('Error occurred.');
   }
 });
-
 
 app.listen(port, () => {
   console.log(`Server listening at http://localhost:${port}`);
