@@ -14,9 +14,16 @@ const allowedOrigins = ['https://file-downloader-tau.vercel.app'];
 
 app.use(cors({
   origin: allowedOrigins,
-  credentials: true // Set to false if you don't use cookies/auth
+  credentials: true
 }));
+
+app.options('*', cors({
+  origin: allowedOrigins,
+  credentials: true
+}));
+
 app.use(bodyParser.json());
+
 app.post('/create-folders', (req, res) => {
   const basePath = req.body.basePath;
   if (!basePath) {
