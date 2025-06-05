@@ -10,7 +10,12 @@ const { exec } = require('child_process');
 const fs = require('fs-extra'); // ✅ Correct
 const inquirer = require('inquirer');
 const os = require('os');
-app.use(cors());
+const allowedOrigins = ['https://file-downloader-tau.vercel.app'];
+
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true // Set to false if you don't use cookies/auth
+}));
 app.use(bodyParser.json());
 app.post('/create-folders', (req, res) => {
   const basePath = req.body.basePath;
