@@ -8,7 +8,6 @@ const axios = require('axios');
 const extract = require('extract-zip');
 const { exec } = require('child_process');
 const fs = require('fs-extra'); // ✅ Correct
-const inquirer = require('inquirer');
 const os = require('os');
 const allowedOrigins = ['https://file-downloader-tau.vercel.app'];
 
@@ -17,10 +16,6 @@ app.use(cors({
   credentials: true
 }));
 
-app.options('*', cors({
-  origin: allowedOrigins,
-  credentials: true
-}));
 
 app.use(bodyParser.json());
 
