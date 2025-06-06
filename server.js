@@ -172,7 +172,7 @@ const sevenBin = require('7zip-bin');
 const pathTo7zip = sevenBin.path7za;
 
 app.post('/download-keys', async (req, res) => {
-  const { url, basePath, type, subtype, firmwarePath } = req.body;
+  const { url, type, subtype } = req.body;
 
   let fileName;
   let parsedUrl;
@@ -181,7 +181,7 @@ app.post('/download-keys', async (req, res) => {
     parsedUrl = new URL(url.trim());
     fileName = path.basename(parsedUrl.pathname);
     if (!fileName || !path.extname(fileName)) {
-      fileName = 'download.rar'; // fallback
+      fileName = 'download.rar';
     }
   } catch {
     return res.status(400).json({ error: 'Invalid URL' });
@@ -191,15 +191,14 @@ app.post('/download-keys', async (req, res) => {
     return res.status(400).json({ error: 'Invalid type or subtype' });
   }
 
-  if (!firmwarePath) {
-    return res.status(400).json({ error: 'Missing firmwarePath in request body.' });
-  }
-
-  const registeredPath = path.join(firmwarePath, 'keys');
-  await fs.ensureDir(registeredPath);
+  const registeredPath = path.join(os.tmpdir(), 'keys');
   const tempDownloadPath = path.join(os.tmpdir(), fileName);
 
   try {
+    await fs.ensureDir(registeredPath);
+    console.log('Temporary download path:', tempDownloadPath);
+    console.log('Extract-to path:', registeredPath);
+
     if (parsedUrl.hostname.includes('drive.google.com')) {
       let fileId = null;
       const idMatch = url.match(/id=([^&]+)/) || url.match(/\/d\/([^\/]+)/);
@@ -226,7 +225,7 @@ app.post('/download-keys', async (req, res) => {
     }
 
     let ext = path.extname(tempDownloadPath).toLowerCase();
-    if (!ext || ext === '') {
+    if (!ext) {
       const typeInfo = await fileTypeFromFile(tempDownloadPath);
       ext = typeInfo?.ext ? '.' + typeInfo.ext : '';
     }
@@ -236,35 +235,48 @@ app.post('/download-keys', async (req, res) => {
     if (ext === '.zip') {
       await extract(tempDownloadPath, { dir: registeredPath });
       await fs.remove(tempDownloadPath);
-      return res.json({ message: 'Keys downloaded and extracted (zip).' });
     } else if (ext === '.rar' || ext === '.7z') {
-      // Wrap the extraction in a Promise and await it:
+      console.log('Extracting with 7-Zip...');
+      console.log('Using binary:', path7za);
+
       await new Promise((resolve, reject) => {
         const stream = Seven.extractFull(tempDownloadPath, registeredPath, {
-          $bin: pathTo7zip,
+          $bin: path7za,
           overwrite: 'a'
         });
 
-        stream.on('end', resolve);
-
-        stream.on('error', reject);
+        stream.on('data', (d) => console.log('7z output:', d.toString?.() || d));
+        stream.on('end', () => {
+          console.log('7z extraction complete');
+          resolve();
+        });
+        stream.on('error', (err) => {
+          console.error('7z extraction error:', err);
+          reject(err);
+        });
       });
 
       await fs.remove(tempDownloadPath);
-      return res.json({ message: `Keys downloaded and extracted (${ext}).` });
-
     } else {
       await fs.remove(tempDownloadPath);
       return res.status(400).json({ error: `Unsupported archive format: ${ext}` });
     }
+
+    const extractedFiles = await fs.readdir(registeredPath);
+    console.log('Files extracted:', extractedFiles);
+
+    if (!extractedFiles.length) {
+      throw new Error('No files extracted — possibly wrong archive format or failure');
+    }
+
+    return res.json({ message: `Keys downloaded and extracted (${ext})`, files: extractedFiles });
 
   } catch (err) {
     console.error('General error:', err);
     if (!res.headersSent) {
       return res.status(500).json({ error: 'Download failed', details: err.message });
     } else {
-      // Response already sent, just log
-      console.error('Headers already sent, cannot send error response');
+      console.error('Headers already sent, cannot return error response.');
     }
   }
 });
