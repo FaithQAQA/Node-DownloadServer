@@ -10,7 +10,7 @@ const { exec } = require('child_process');
 const fs = require('fs-extra');
 const os = require('os');
 const fileTypeFromFile = require('file-type').fileTypeFromFile;
-
+const path7za = require('7zip-bin').path7za; // ✅ FIXED HERE
 const allowedOrigins = [
   'https://file-downloader-tau.vercel.app',
   'http://localhost:4200'
