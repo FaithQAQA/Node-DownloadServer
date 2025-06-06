@@ -182,11 +182,15 @@ const pathTo7zip = sevenBin.path7za;
 app.post('/download-keys', async (req, res) => {
   const { url, type, subtype, firmwarePath } = req.body;
 
+  console.log('[INFO] Incoming request with body:', req.body);
+
   if (!url || !type || !subtype || !firmwarePath) {
+    console.error('[ERROR] Missing required fields');
     return res.status(400).json({ error: 'Missing required fields (url, type, subtype, firmwarePath)' });
   }
 
   if (type !== 'tool' || subtype !== 'firmware') {
+    console.error('[ERROR] Invalid type/subtype:', { type, subtype });
     return res.status(400).json({ error: 'Invalid type or subtype' });
   }
 
@@ -194,7 +198,10 @@ app.post('/download-keys', async (req, res) => {
   try {
     parsedUrl = new URL(url.trim());
     fileName = path.basename(parsedUrl.pathname) || 'download.rar';
-  } catch {
+    console.log('[INFO] Parsed URL:', parsedUrl.href);
+    console.log('[INFO] File name extracted:', fileName);
+  } catch (err) {
+    console.error('[ERROR] Invalid URL:', url, err.message);
     return res.status(400).json({ error: 'Invalid URL' });
   }
 
@@ -203,20 +210,24 @@ app.post('/download-keys', async (req, res) => {
 
   try {
     await fs.ensureDir(registeredPath);
-    console.log('Download to:', tempDownloadPath);
-    console.log('Extract to:', registeredPath);
+    console.log('[INFO] Created or verified target extract directory:', registeredPath);
+    console.log('[INFO] Temp download path:', tempDownloadPath);
 
     // Download file
     if (parsedUrl.hostname.includes('drive.google.com')) {
+      console.log('[INFO] Detected Google Drive link');
       const idMatch = url.match(/id=([^&]+)/) || url.match(/\/d\/([^\/]+)/);
       const fileId = idMatch?.[1];
 
       if (!fileId) {
+        console.error('[ERROR] No file ID found in Google Drive URL');
         return res.status(400).json({ error: 'Invalid Google Drive URL - no file ID found.' });
       }
 
+      console.log('[INFO] Extracted Google Drive file ID:', fileId);
       await downloadFromGoogleDrive(fileId, tempDownloadPath);
     } else {
+      console.log('[INFO] Starting download from URL:', url);
       const response = await axios({
         method: 'GET',
         url,
@@ -226,57 +237,76 @@ app.post('/download-keys', async (req, res) => {
       await new Promise((resolve, reject) => {
         const writer = fs.createWriteStream(tempDownloadPath);
         response.data.pipe(writer);
-        writer.on('finish', resolve);
-        writer.on('error', reject);
+        writer.on('finish', () => {
+          console.log('[INFO] Download complete');
+          resolve();
+        });
+        writer.on('error', (err) => {
+          console.error('[ERROR] Download failed:', err.message);
+          reject(err);
+        });
       });
     }
 
     // Detect file extension if missing
     let ext = path.extname(tempDownloadPath).toLowerCase();
     if (!ext) {
+      console.log('[INFO] No extension in file name, checking file type');
       const typeInfo = await fileType.fromFile(tempDownloadPath);
       ext = typeInfo?.ext ? '.' + typeInfo.ext : '';
+      console.log('[INFO] Detected extension from content:', ext);
+    } else {
+      console.log('[INFO] Detected extension from file name:', ext);
     }
-
-    console.log('Detected extension:', ext);
 
     // Extract archive
     if (ext === '.zip') {
+      console.log('[INFO] Extracting .zip archive...');
       await extract(tempDownloadPath, { dir: registeredPath });
+      console.log('[INFO] .zip extraction complete');
     } else if (ext === '.rar' || ext === '.7z') {
+      console.log('[INFO] Extracting archive with 7-Zip:', ext);
       await new Promise((resolve, reject) => {
         const stream = Seven.extractFull(tempDownloadPath, registeredPath, {
           $bin: path7za,
           overwrite: 'a'
         });
 
-        stream.on('data', d => console.log('7z output:', d.toString?.() || d));
+        stream.on('data', d => console.log('[7z OUTPUT]', d.toString?.() || d));
         stream.on('end', () => {
-          console.log('7z extraction complete');
+          console.log('[INFO] 7z extraction complete');
           resolve();
         });
-        stream.on('error', reject);
+        stream.on('error', (err) => {
+          console.error('[ERROR] 7z extraction failed:', err.message);
+          reject(err);
+        });
       });
     } else {
+      console.error('[ERROR] Unsupported archive format:', ext);
       await fs.remove(tempDownloadPath);
       return res.status(400).json({ error: `Unsupported archive format: ${ext}` });
     }
 
     await fs.remove(tempDownloadPath);
+    console.log('[INFO] Temp file removed after extraction');
 
     const extractedFiles = await fs.readdir(registeredPath);
-    if (!extractedFiles.length) throw new Error('No files extracted');
+    console.log('[INFO] Files extracted:', extractedFiles);
+
+    if (!extractedFiles.length) {
+      throw new Error('No files extracted');
+    }
 
     return res.json({ message: `Keys downloaded and extracted (${ext})`, files: extractedFiles });
 
   } catch (err) {
-    console.error('General error:', err);
+    console.error('[FATAL ERROR] General error occurred:', err);
     if (!res.headersSent) {
       return res.status(500).json({ error: 'Download failed', details: err.message });
     }
   }
 });
-
 
 
 app.post('/download-dynamic', async (req, res) => {
