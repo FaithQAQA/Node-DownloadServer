@@ -234,7 +234,6 @@ app.post('/download-keys', async (req, res) => {
 
     if (ext === '.zip') {
       await extract(tempDownloadPath, { dir: registeredPath });
-      await fs.remove(tempDownloadPath);
     } else if (ext === '.rar' || ext === '.7z') {
       console.log('Extracting with 7-Zip...');
       console.log('Using binary:', path7za);
@@ -246,30 +245,41 @@ app.post('/download-keys', async (req, res) => {
         });
 
         stream.on('data', (d) => console.log('7z output:', d.toString?.() || d));
-        stream.on('end', () => {
-          console.log('7z extraction complete');
-          resolve();
-        });
-        stream.on('error', (err) => {
-          console.error('7z extraction error:', err);
-          reject(err);
-        });
+        stream.on('end', resolve);
+        stream.on('error', reject);
       });
-
-      await fs.remove(tempDownloadPath);
     } else {
       await fs.remove(tempDownloadPath);
       return res.status(400).json({ error: `Unsupported archive format: ${ext}` });
     }
 
-    const extractedFiles = await fs.readdir(registeredPath);
-    console.log('Files extracted:', extractedFiles);
+    await fs.remove(tempDownloadPath);
 
-    if (!extractedFiles.length) {
+    // 🧹 Flatten nested folders (bring prod.keys and title.keys up one level if needed)
+    const files = await fs.readdir(registeredPath);
+    for (const item of files) {
+      const fullPath = path.join(registeredPath, item);
+      const stat = await fs.stat(fullPath);
+
+      if (stat.isDirectory()) {
+        const innerFiles = await fs.readdir(fullPath);
+        for (const innerFile of innerFiles) {
+          const src = path.join(fullPath, innerFile);
+          const dest = path.join(registeredPath, innerFile);
+          await fs.move(src, dest, { overwrite: true });
+        }
+        await fs.remove(fullPath); // cleanup nested folder
+      }
+    }
+
+    const finalFiles = await fs.readdir(registeredPath);
+    console.log('Files extracted:', finalFiles);
+
+    if (!finalFiles.length) {
       throw new Error('No files extracted — possibly wrong archive format or failure');
     }
 
-    return res.json({ message: `Keys downloaded and extracted (${ext})`, files: extractedFiles });
+    return res.json({ message: `Keys downloaded and extracted (${ext})`, files: finalFiles });
 
   } catch (err) {
     console.error('General error:', err);
@@ -280,6 +290,7 @@ app.post('/download-keys', async (req, res) => {
     }
   }
 });
+
 
 
 app.post('/download-dynamic', async (req, res) => {
