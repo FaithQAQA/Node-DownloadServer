@@ -9,6 +9,7 @@ const extract = require('extract-zip');
 const { exec } = require('child_process');
 const fs = require('fs-extra');
 const os = require('os');
+const fileType = require('file-type');
 
 const path7za = require('7zip-bin').path7za; // ✅ FIXED HERE
 const allowedOrigins = [
@@ -233,7 +234,7 @@ app.post('/download-keys', async (req, res) => {
     // Detect file extension if missing
     let ext = path.extname(tempDownloadPath).toLowerCase();
     if (!ext) {
-      const typeInfo = await fileTypeFromFile(tempDownloadPath);
+      const typeInfo = await fileType.fromFile(tempDownloadPath);
       ext = typeInfo?.ext ? '.' + typeInfo.ext : '';
     }
 
