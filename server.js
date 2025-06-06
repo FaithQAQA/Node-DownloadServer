@@ -172,37 +172,36 @@ const sevenBin = require('7zip-bin');
 const pathTo7zip = sevenBin.path7za;
 
 app.post('/download-keys', async (req, res) => {
-  const { url, type, subtype } = req.body;
+  const { url, type, subtype, firmwarePath } = req.body;
 
-  let fileName;
-  let parsedUrl;
-
-  try {
-    parsedUrl = new URL(url.trim());
-    fileName = path.basename(parsedUrl.pathname);
-    if (!fileName || !path.extname(fileName)) {
-      fileName = 'download.rar';
-    }
-  } catch {
-    return res.status(400).json({ error: 'Invalid URL' });
+  if (!url || !type || !subtype || !firmwarePath) {
+    return res.status(400).json({ error: 'Missing required fields (url, type, subtype, firmwarePath)' });
   }
 
   if (type !== 'tool' || subtype !== 'firmware') {
     return res.status(400).json({ error: 'Invalid type or subtype' });
   }
 
-  const registeredPath = path.join(os.tmpdir(), 'keys');
+  let parsedUrl, fileName;
+  try {
+    parsedUrl = new URL(url.trim());
+    fileName = path.basename(parsedUrl.pathname) || 'download.rar';
+  } catch {
+    return res.status(400).json({ error: 'Invalid URL' });
+  }
+
+  const registeredPath = path.join(firmwarePath, 'keys');
   const tempDownloadPath = path.join(os.tmpdir(), fileName);
 
   try {
     await fs.ensureDir(registeredPath);
-    console.log('Temporary download path:', tempDownloadPath);
-    console.log('Extract-to path:', registeredPath);
+    console.log('Download to:', tempDownloadPath);
+    console.log('Extract to:', registeredPath);
 
+    // Download
     if (parsedUrl.hostname.includes('drive.google.com')) {
-      let fileId = null;
       const idMatch = url.match(/id=([^&]+)/) || url.match(/\/d\/([^\/]+)/);
-      if (idMatch) fileId = idMatch[1];
+      const fileId = idMatch?.[1];
 
       if (!fileId) {
         return res.status(400).json({ error: 'Invalid Google Drive URL - no file ID found.' });
@@ -224,28 +223,30 @@ app.post('/download-keys', async (req, res) => {
       });
     }
 
+    // Detect extension
     let ext = path.extname(tempDownloadPath).toLowerCase();
     if (!ext) {
       const typeInfo = await fileTypeFromFile(tempDownloadPath);
       ext = typeInfo?.ext ? '.' + typeInfo.ext : '';
     }
 
-    console.log('Detected file type extension:', ext);
+    console.log('Detected extension:', ext);
 
+    // Extract
     if (ext === '.zip') {
       await extract(tempDownloadPath, { dir: registeredPath });
     } else if (ext === '.rar' || ext === '.7z') {
-      console.log('Extracting with 7-Zip...');
-      console.log('Using binary:', path7za);
-
       await new Promise((resolve, reject) => {
         const stream = Seven.extractFull(tempDownloadPath, registeredPath, {
           $bin: path7za,
           overwrite: 'a'
         });
 
-        stream.on('data', (d) => console.log('7z output:', d.toString?.() || d));
-        stream.on('end', resolve);
+        stream.on('data', d => console.log('7z output:', d.toString?.() || d));
+        stream.on('end', () => {
+          console.log('7z extraction complete');
+          resolve();
+        });
         stream.on('error', reject);
       });
     } else {
@@ -255,42 +256,18 @@ app.post('/download-keys', async (req, res) => {
 
     await fs.remove(tempDownloadPath);
 
-    // 🧹 Flatten nested folders (bring prod.keys and title.keys up one level if needed)
-    const files = await fs.readdir(registeredPath);
-    for (const item of files) {
-      const fullPath = path.join(registeredPath, item);
-      const stat = await fs.stat(fullPath);
+    const extractedFiles = await fs.readdir(registeredPath);
+    if (!extractedFiles.length) throw new Error('No files extracted');
 
-      if (stat.isDirectory()) {
-        const innerFiles = await fs.readdir(fullPath);
-        for (const innerFile of innerFiles) {
-          const src = path.join(fullPath, innerFile);
-          const dest = path.join(registeredPath, innerFile);
-          await fs.move(src, dest, { overwrite: true });
-        }
-        await fs.remove(fullPath); // cleanup nested folder
-      }
-    }
-
-    const finalFiles = await fs.readdir(registeredPath);
-    console.log('Files extracted:', finalFiles);
-
-    if (!finalFiles.length) {
-      throw new Error('No files extracted — possibly wrong archive format or failure');
-    }
-
-    return res.json({ message: `Keys downloaded and extracted (${ext})`, files: finalFiles });
+    return res.json({ message: `Keys downloaded and extracted (${ext})`, files: extractedFiles });
 
   } catch (err) {
     console.error('General error:', err);
     if (!res.headersSent) {
       return res.status(500).json({ error: 'Download failed', details: err.message });
-    } else {
-      console.error('Headers already sent, cannot return error response.');
     }
   }
 });
-
 
 
 app.post('/download-dynamic', async (req, res) => {
