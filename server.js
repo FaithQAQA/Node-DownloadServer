@@ -9,7 +9,7 @@ const extract = require('extract-zip');
 const { exec } = require('child_process');
 const fs = require('fs-extra');
 const os = require('os');
-const fileTypeFromFile = require('file-type').fileTypeFromFile;
+
 const path7za = require('7zip-bin').path7za; // ✅ FIXED HERE
 const allowedOrigins = [
   'https://file-downloader-tau.vercel.app',
@@ -171,7 +171,10 @@ const Seven = require('node-7z');
 const sevenBin = require('7zip-bin');
 const pathTo7zip = sevenBin.path7za;
 
-app.post('/download-keys', async (req, res) => {
+app.post('/download-keys', async (req, res) => 
+  {
+      const fileTypeModule = await import('file-type');
+  const fileTypeFromFile = fileTypeModule.fileTypeFromFile
   const { url, type, subtype, firmwarePath } = req.body;
 
   if (!url || !type || !subtype || !firmwarePath) {
