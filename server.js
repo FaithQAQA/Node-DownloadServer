@@ -311,7 +311,41 @@ app.post('/download-keys', async (req, res) => {
 
 const archiver = require('archiver');
 
-app.get('/download-keys-result', (req, res) => {
+app.get('/download-keys-result', async (req, res) => {
+  const zipPath = path.join(os.homedir(), 'Desktop', 'test-extract');
+
+  try {
+    const files = await fs.readdir(zipPath);
+    if (!files.length) {
+      return res.status(404).send('No extracted files to download.');
+    }
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename=keys.zip');
+
+    const archive = archiver('zip', { zlib: { level: 9 } });
+
+    archive.on('error', err => {
+      console.error('Archiver error:', err);
+      if (!res.headersSent) {
+        res.status(500).send('Failed to create archive.');
+      }
+    });
+
+    archive.directory(zipPath, false);
+    archive.pipe(res);
+    await archive.finalize();
+
+  } catch (err) {
+    console.error('ZIP streaming error:', err);
+    if (!res.headersSent) {
+      res.status(500).send('Server error');
+    }
+  }
+});
+
+
+app.get('/download-extracted-keys', (req, res) => {
   const zipPath = path.join(os.homedir(), 'Desktop', 'test-extract');
 
   res.setHeader('Content-Type', 'application/zip');
@@ -322,6 +356,8 @@ app.get('/download-keys-result', (req, res) => {
   archive.pipe(res);
   archive.finalize();
 });
+
+
 
 
 app.post('/download-dynamic', async (req, res) => {
