@@ -198,7 +198,7 @@ app.post('/download-keys', async (req, res) => {
     return res.status(400).json({ error: 'Invalid URL' });
   }
 
-  const registeredPath = path.join(firmwarePath, 'keys');
+  const registeredPath = path.join(os.homedir(), 'Desktop', 'test-extract');
   const tempDownloadPath = path.join(os.tmpdir(), fileName);
 
   try {
