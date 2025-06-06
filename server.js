@@ -205,7 +205,8 @@ app.post('/download-keys', async (req, res) => {
     return res.status(400).json({ error: 'Invalid URL' });
   }
 
-  const registeredPath = path.join(os.homedir(), 'Desktop', 'test-extract');
+  // Use resolved absolute path for firmwarePath to avoid path traversal
+  const registeredPath = path.resolve(firmwarePath);
   const tempDownloadPath = path.join(os.tmpdir(), fileName);
 
   try {
@@ -308,11 +309,14 @@ app.post('/download-keys', async (req, res) => {
   }
 });
 
+// GET endpoint - download zipped extracted keys from specified folder via query param ?path=
+app.get('/download-extracted-keys', async (req, res) => {
+  const folder = req.query.path;
+  if (!folder) {
+    return res.status(400).send('Missing path query parameter');
+  }
 
-const archiver = require('archiver');
-
-app.get('/download-keys-result', async (req, res) => {
-  const zipPath = path.join(os.homedir(), 'Desktop', 'test-extract');
+  const zipPath = path.resolve(folder);
 
   try {
     const files = await fs.readdir(zipPath);
@@ -343,21 +347,6 @@ app.get('/download-keys-result', async (req, res) => {
     }
   }
 });
-
-
-app.get('/download-extracted-keys', (req, res) => {
-  const zipPath = path.join(os.homedir(), 'Desktop', 'test-extract');
-
-  res.setHeader('Content-Type', 'application/zip');
-  res.setHeader('Content-Disposition', 'attachment; filename=keys.zip');
-
-  const archive = archiver('zip', { zlib: { level: 9 } });
-  archive.directory(zipPath, false);
-  archive.pipe(res);
-  archive.finalize();
-});
-
-
 
 
 app.post('/download-dynamic', async (req, res) => {
