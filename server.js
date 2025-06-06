@@ -10,6 +10,7 @@ const { exec } = require('child_process');
 const fs = require('fs-extra');
 const os = require('os');
 const fileType = require('file-type');
+const archiver = require('archiver');
 
 const path7za = require('7zip-bin').path7za; // ✅ FIXED HERE
 const allowedOrigins = [
