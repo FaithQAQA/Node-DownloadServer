@@ -178,10 +178,7 @@ const Seven = require('node-7z');
 const sevenBin = require('7zip-bin');
 const pathTo7zip = sevenBin.path7za;
 
-app.post('/download-keys', async (req, res) => 
-  {
-   const typeInfo = await fileTypeFromFile(tempDownloadPath);
-
+app.post('/download-keys', async (req, res) => {
   const { url, type, subtype, firmwarePath } = req.body;
 
   if (!url || !type || !subtype || !firmwarePath) {
@@ -208,7 +205,7 @@ app.post('/download-keys', async (req, res) =>
     console.log('Download to:', tempDownloadPath);
     console.log('Extract to:', registeredPath);
 
-    // Download
+    // Download file
     if (parsedUrl.hostname.includes('drive.google.com')) {
       const idMatch = url.match(/id=([^&]+)/) || url.match(/\/d\/([^\/]+)/);
       const fileId = idMatch?.[1];
@@ -233,7 +230,7 @@ app.post('/download-keys', async (req, res) =>
       });
     }
 
-    // Detect extension
+    // Detect file extension if missing
     let ext = path.extname(tempDownloadPath).toLowerCase();
     if (!ext) {
       const typeInfo = await fileTypeFromFile(tempDownloadPath);
@@ -242,7 +239,7 @@ app.post('/download-keys', async (req, res) =>
 
     console.log('Detected extension:', ext);
 
-    // Extract
+    // Extract archive
     if (ext === '.zip') {
       await extract(tempDownloadPath, { dir: registeredPath });
     } else if (ext === '.rar' || ext === '.7z') {
@@ -278,6 +275,7 @@ app.post('/download-keys', async (req, res) =>
     }
   }
 });
+
 
 
 app.post('/download-dynamic', async (req, res) => {
