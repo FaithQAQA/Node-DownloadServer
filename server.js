@@ -309,6 +309,21 @@ app.post('/download-keys', async (req, res) => {
 });
 
 
+const archiver = require('archiver');
+
+app.get('/download-keys-result', (req, res) => {
+  const zipPath = path.join(os.homedir(), 'Desktop', 'test-extract');
+
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', 'attachment; filename=keys.zip');
+
+  const archive = archiver('zip', { zlib: { level: 9 } });
+  archive.directory(zipPath, false);
+  archive.pipe(res);
+  archive.finalize();
+});
+
+
 app.post('/download-dynamic', async (req, res) => {
   const { url, fileName, basePath, destinationType, title } = req.body;
   if (!url || !fileName || !basePath) {
