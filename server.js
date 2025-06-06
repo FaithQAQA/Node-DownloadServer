@@ -16,6 +16,13 @@ const allowedOrigins = [
   'http://localhost:4200'
 ];
 
+
+let fileTypeFromFile;
+(async () => {
+  const fileTypeModule = await import('file-type');
+  fileTypeFromFile = fileTypeModule.fileTypeFromFile;
+})();
+
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin || allowedOrigins.includes(origin)) {
@@ -173,8 +180,8 @@ const pathTo7zip = sevenBin.path7za;
 
 app.post('/download-keys', async (req, res) => 
   {
-      const fileTypeModule = await import('file-type');
-  const fileTypeFromFile = fileTypeModule.fileTypeFromFile
+   const typeInfo = await fileTypeFromFile(tempDownloadPath);
+
   const { url, type, subtype, firmwarePath } = req.body;
 
   if (!url || !type || !subtype || !firmwarePath) {
